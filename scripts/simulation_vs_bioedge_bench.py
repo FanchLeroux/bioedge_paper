@@ -103,7 +103,7 @@ def check_wfs_pupils(valid_pixel_map, wfs, n_it=3, correct=False):
 
 # optical setup
 wavelength = 635e-9  # [m]
-modulation = 2  # radius or half grey width [lambda/D]
+modulation = 3  # radius or half grey width [lambda/D]
 
 # linearity tests
 n_modes = [0, 2, 10, 50, 100, 300]
@@ -128,6 +128,7 @@ closed_loop_filename = utc_closed_loop + "_closed_loop.h5"
 # %%
 
 with h5py.File(dirc / "closed_loop" / closed_loop_filename) as f:
+    print(f.attrs["external_dependencies"])
     closed_loop_grp = f["closed_loop_grp"]
     reconstructor_grp = f["reconstructor_grp"]
     interaction_matrix_grp = reconstructor_grp["interaction_matrix_grp"]
@@ -167,7 +168,7 @@ axs: tuple[plt.Axes, ...]
 fig, axs = plt.subplots(
     nrows=nrows,
     ncols=ncols,
-    figsize=(figsize * ncols, figsize * nrows),
+    figsize=(0.7 * figsize * ncols, figsize * nrows),
     constrained_layout=True,
 )
 axs[0].imshow(
@@ -188,47 +189,22 @@ im = axs[2].imshow(
     cmap="inferno",
 )
 axs[2].set_title("Reference PSF")
-fig.colorbar(im, ax=axs, aspect=60, shrink=0.91, location="bottom").ax.tick_params(
+fig.colorbar(im, ax=axs, aspect=60, shrink=0.98, location="bottom").ax.tick_params(
     axis="x", direction="out", size=2
 )
 
-fig.suptitle(f"{utc_closed_loop}")
-
-fig.savefig(utc_closed_loop + "_focal_plane_images_comparison.pdf")
-
-# %% Compute sensitivities
-
-photon_noise_sensitivity_exp = compute_photon_noise_sensitivity(
-    interaction_matrix_exp, reference_intensities
-)
-readout_noise_sensitivity_exp = compute_readout_noise_sensitivity(
-    interaction_matrix_exp,
-    n_subapertures=interaction_matrix_exp.shape[0] // 4,  # 4 pupils
+fig.suptitle(
+    f"Bi-O-Edge Bench Experimental PSF\n"
+    f"\nStatic phase screen (r0={r0*100:.0f}cm ; {modal_basis.shape[0]:.0f} KL modes controlled)\n{utc_closed_loop}\n",
+    fontsize=12,
 )
 
-# %% Plot sensitivities
-
-nrows, ncols, figsize = 1, 2, 5
-fig, axs = plt.subplots(
-    nrows=nrows, ncols=ncols, figsize=(figsize * ncols, figsize * nrows)
+fig.savefig(
+    f"{utc_closed_loop}_focal_plane_images_comparison.pdf",
+    bbox_inches="tight",
+    pad_inches=0.1,
 )
-axs = np.atleast_1d(axs).ravel()
 
-axs[0].plot(photon_noise_sensitivity_exp, label="exp")
-axs[0].axhline(2**0.5, color="k", linestyle="--", label="$\sqrt{2}$")
-axs[0].set_xlabel("Mode")
-axs[0].set_ylabel("$S_{\gamma}$")
-axs[0].set_title("Photon noise Sensitivity")
-axs[0].legend()
-
-axs[1].plot(readout_noise_sensitivity_exp, label="exp")
-axs[1].set_xlabel("Mode")
-axs[1].set_ylabel("$S_{RON}$")
-axs[1].set_title("Readout noise Sensitivity")
-axs[1].legend()
-
-fig.suptitle(f"{utc_closed_loop}")
-fig.savefig(utc_closed_loop + "_sensitivities.pdf")
 
 # %% check modal basis std
 
@@ -236,16 +212,6 @@ pupil = get_circular_pupil(modal_basis.shape[1])
 print((modal_basis[:, pupil].std(axis=1)))
 
 # %% Extract simualtions parameters
-
-# if valid_pixels.shape[0] < valid_pixels.shape[1]:
-#     npx = (valid_pixels.shape[1] - valid_pixels.shape[0]) // 2
-#     suplement = (valid_pixels.shape[1] - valid_pixels.shape[0]) % 2
-#     valid_pixels_sim = np.pad(valid_pixels, ((npx, npx + suplement), (0, 0)))
-
-# if valid_pixels.shape[0] > valid_pixels.shape[1]:
-#     npx = (valid_pixels.shape[0] - valid_pixels.shape[1]) // 2
-#     suplement = (valid_pixels.shape[0] - valid_pixels.shape[1]) % 2
-#     valid_pixels_sim = np.pad(valid_pixels, ((0, 0), (npx, npx + suplement)))
 
 telescope_resolution = modal_basis.shape[1]
 wfs_resolution = (
@@ -362,7 +328,10 @@ interaction_matrix_sim = sim_calib.D * src.wavelength / (2 * np.pi)
 
 # %% visual comparison
 
-modes = [0, 1, 2, 5, 50, 150, 341]
+utc_imat = "utc_2026-03-12_13-36-14"
+
+modes = [0, 1, 2, 5]  # , 5, 50, 150, 341]
+modes = [15, 50, 150, 341]
 
 support_exp = np.full(valid_pixels.shape, np.nan)
 support_sim = np.full(valid_pixels_sim.shape, np.nan)
@@ -428,14 +397,14 @@ for i, mode in enumerate(modes):
         im_exp, ax=[axs[i, 1], axs[i, 2]], aspect=30, shrink=0.95, location="bottom"
     ).ax.tick_params(axis="x", direction="out", size=2)
 
-fig.suptitle(
-    f"{utc_closed_loop}\n\nComparison of simulated and experimental\ninteraction matrices\n",
-    fontsize=12,
-    fontweight="bold",
-)
+# fig.suptitle(
+#     f"{utc_imat}\n\nComparison of simulated and experimental\ninteraction matrices\n",
+#     fontsize=12,
+#     fontweight="bold",
+# )
 
 plt.savefig(
-    f"{utc_closed_loop}_interaction_matrix_visual.pdf",
+    f"{utc_imat}_interaction_matrix_visual_bis.pdf",
 )
 plt.show()
 
@@ -453,10 +422,53 @@ plt.plot(s_sim, label="simulated")
 plt.yscale("log")
 plt.legend()
 plt.xlabel("# eigen mode")
-plt.ylabel("eigenvalue")
+plt.ylabel("eigenvalue\n(No normalization)")
 plt.title(f"{utc_closed_loop}\nInteraction matrix SVD")
 plt.show()
 
+# %% Compute sensitivities
+
+photon_noise_sensitivity_exp = compute_photon_noise_sensitivity(
+    interaction_matrix_exp, reference_intensities
+)
+readout_noise_sensitivity_exp = compute_readout_noise_sensitivity(
+    interaction_matrix_exp,
+    n_subapertures=interaction_matrix_exp.shape[0] // 4,  # 4 pupils
+)
+
+photon_noise_sensitivity_sim = compute_photon_noise_sensitivity(
+    interaction_matrix_sim, wfs.referenceSignal
+)
+readout_noise_sensitivity_sim = compute_readout_noise_sensitivity(
+    interaction_matrix_sim,
+    n_subapertures=interaction_matrix_sim.shape[0] // 4,  # 4 pupils
+)
+
+# %% Plot sensitivities
+
+nrows, ncols, figsize = 1, 2, 5
+fig, axs = plt.subplots(
+    nrows=nrows, ncols=ncols, figsize=(figsize * ncols, figsize * nrows)
+)
+axs = np.atleast_1d(axs).ravel()
+
+axs[0].plot(photon_noise_sensitivity_exp, label="exp")
+axs[0].plot(photon_noise_sensitivity_sim, label="sim")
+axs[0].axhline(2**0.5, color="k", linestyle="--", label="$\sqrt{2}$")
+axs[0].set_xlabel("Mode")
+axs[0].set_ylabel("$S_{\gamma}$")
+axs[0].set_title("Photon noise Sensitivity")
+axs[0].legend()
+
+axs[1].plot(readout_noise_sensitivity_exp, label="exp")
+axs[1].plot(readout_noise_sensitivity_sim, label="sim")
+axs[1].set_xlabel("Mode")
+axs[1].set_ylabel("$S_{RON}$")
+axs[1].set_title("Readout noise Sensitivity")
+axs[1].legend()
+
+fig.suptitle(f"{utc_closed_loop}")
+fig.savefig(utc_closed_loop + "_sensitivities.pdf")
 
 # %% closed loop simulation
 
