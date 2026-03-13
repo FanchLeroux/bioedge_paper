@@ -118,10 +118,10 @@ dirc = (
     / "20260312_bioedge_bench_results_for_jdd"
 )
 
-utc_closed_loop = "utc_2026-03-12_10-22-24"
-utc_closed_loop = "utc_2026-03-12_13-57-13"
+# utc_closed_loop = "utc_2026-03-12_10-22-24"
+# utc_closed_loop = "utc_2026-03-12_13-57-13"
 utc_closed_loop = "utc_2026-03-12_14-16-36"
-utc_closed_loop = "utc_2026-03-12_14-21-11"
+# utc_closed_loop = "utc_2026-03-12_14-21-11"
 
 closed_loop_filename = utc_closed_loop + "_closed_loop.h5"
 
@@ -472,9 +472,16 @@ fig.savefig(utc_closed_loop + "_sensitivities.pdf")
 
 # %% closed loop simulation
 
+is_turbulence_static = np.all(total_exp == total_exp[0])
+if is_turbulence_static:
+    turbulence_sim = np.stack(
+        [turbulence_sim[0]] * turbulence_sim.shape[0],
+        axis=0,
+    )
+
 reconstructor_sim = np.linalg.pinv(sim_calib.D)
 dm.coefs = 0
-closed_loop_sim = close_the_loop(
+total_sim, residual_sim = close_the_loop(
     src,
     tel,
     dm,
@@ -495,8 +502,8 @@ closed_loop_sim = close_the_loop(
 plt.figure()
 plt.plot(total_exp, label="exp_total")
 plt.plot(residual_exp, label="exp_residual")
-plt.plot(closed_loop_sim.total, label="sim_total")
-plt.plot(closed_loop_sim.residual, label="sim_residual")
+plt.plot(total_sim, label="sim_total")
+plt.plot(residual_sim, label="sim_residual")
 plt.legend()
 plt.xlabel("# iter")
 plt.ylabel("residual phase std [rad]")
@@ -504,10 +511,11 @@ plt.title(
     utc_closed_loop + f"\nclosed loop with Bi-O-Edge\n"
     f"r0: {(100*r0):.0f} cm - gain: {loop_gain:.1f} - frequency: {frequency:.0f} Hz"
 )
+plt.savefig(f"{utc_closed_loop}_residual.pdf")
 
 plt.figure()
 plt.plot(np.exp(-(residual_exp**2)), label="experimental")
-plt.plot(np.exp(-((closed_loop_sim.residual) ** 2)), label="simulation")
+plt.plot(np.exp(-((residual_sim) ** 2)), label="simulation")
 plt.legend()
 plt.xlabel("# iter")
 plt.ylabel("Strehl Ratio (Marechal)")
@@ -515,6 +523,7 @@ plt.title(
     utc_closed_loop + f"\nclosed loop with Bi-O-Edge\n"
     f"r0: {(100*r0):.0f} cm - gain: {loop_gain:.1f} - frequency: {frequency:.0f} Hz"
 )
+plt.savefig(f"{utc_closed_loop}_strehl.pdf")
 plt.show()
 
 # %% linearity tests
@@ -530,31 +539,19 @@ reconstructed_amplitudes_rad_bioedge_sim = np.full(
     np.nan,
 )
 
-
-reconstructed_amplitudes_rad_pyramid = np.full(
-    (
-        len(n_modes),
-        amplitudes_meter.shape[0],
-        reconstructor_sim.shape[0],
-    ),
-    np.nan,
-)
-
 for mode_index, n_mode in enumerate(n_modes):
     for amplitude_index, amplitude_meter in tqdm(enumerate(amplitudes_meter)):
         coefs = np.zeros(dm.nValidAct)
         coefs[n_mode] = amplitude_meter
         dm.coefs = coefs
         src**tel * dm * wfs
-        src**tel * dm * pyramid
         reconstructed_amplitudes_rad_bioedge_sim[mode_index, amplitude_index, :] = (
             2 * np.pi / src.wavelength * (reconstructor_sim @ wfs.signal)
         )
-        reconstructed_amplitudes_rad_pyramid[mode_index, amplitude_index, :] = (
-            2 * np.pi / src.wavelength * (reconstructor_pyramid @ pyramid.signal)
-        )
 
-# %%
+# %% linearity
+
+linearity_utc = "utc_"
 
 import math
 
@@ -571,11 +568,7 @@ for mode_index, n_mode in enumerate(n_modes):
         reconstructed_amplitudes_rad_bioedge_sim[mode_index, :, n_mode],
         label="linearity curve bioedge sim",
     )
-    axs[mode_index].plot(
-        amplitudes_rad,
-        reconstructed_amplitudes_rad_pyramid[mode_index, :, n_mode],
-        label="linearity curve pyramid sim",
-    )
+
     axs[mode_index].plot(
         amplitudes_rad,
         amplitudes_rad,
